@@ -8,6 +8,7 @@ draw_box() {
     local content="$2"
     local width=60
     local GREEN='\033[0;32m'
+    local BLUE='\033[0;34m'
     local YELLOW='\033[1;33m'
     local NC='\033[0m'
     local BOLD='\033[1m'
