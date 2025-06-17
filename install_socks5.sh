@@ -1,27 +1,34 @@
 #!/usr/bin/env bash
-# SOCKS5 (Dante) auto installer - Fixed credentials and port
+# SOCKS5 (Dante) auto installer for Ubuntu/Debian/RedHat - Default Configuration
 
 set -e
 
+
+# Function to draw box around text
 draw_box() {
     local title="$1"
     local content="$2"
     local width=60
+    
+    # Colors
     local GREEN='\033[0;32m'
     local BLUE='\033[0;34m'
     local YELLOW='\033[1;33m'
-    local NC='\033[0m'
+    local NC='\033[0m' # No Color
     local BOLD='\033[1m'
-
+    
     echo ""
     echo -e "${GREEN}┌$(printf '─%.0s' $(seq 1 $((width-2))))┐${NC}"
     echo -e "${GREEN}│${BOLD}${YELLOW} $(printf "%-*s" $((width-4)) "$title") ${NC}${GREEN}│${NC}"
     echo -e "${GREEN}├$(printf '─%.0s' $(seq 1 $((width-2))))┤${NC}"
+    
+    # Split content by newlines and format each line
     while IFS= read -r line; do
         if [[ -n "$line" ]]; then
             echo -e "${GREEN}│${NC} $(printf "%-*s" $((width-4)) "$line") ${GREEN}│${NC}"
         fi
     done <<< "$content"
+    
     echo -e "${GREEN}└$(printf '─%.0s' $(seq 1 $((width-2))))┘${NC}"
     echo ""
 }
@@ -31,23 +38,32 @@ OS=""
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     case "$ID" in
-        ubuntu|debian) OS="debian" ;;
-        amzn|centos|rhel|rocky|almalinux) OS="redhat" ;;
-        *) echo "❌ Unsupported OS: $ID"; exit 1 ;;
+        ubuntu|debian) OS="debian" ;;        
+        amzn|centos|rhel|rocky|almalinux) OS="redhat" ;;        
+        *) echo "❌ Unsupported OS: $ID"; exit 1 ;;    
     esac
 else
     echo "❌ Cannot detect OS."; exit 1
 fi
 
+# Default settings - SOCKS5 with automatic credentials
+choice="1"
+config_mode="1"
+
+# Common variables
 EXT_IF=$(ip route | awk '/default/ {print $5; exit}')
 EXT_IF=${EXT_IF:-eth0}
 PUBLIC_IP=$(curl -4 -s https://api.ipify.org)
 
 install_socks5() {
-    local USERNAME="linh"
-    local PASSWORD="linh123@"
-    local PORT="1219"
+    local USERNAME PASSWORD PORT
+    
+    # Automatic mode - generate random credentials
+    USERNAME="user_$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
+    PASSWORD="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c12)"
+    PORT=$(shuf -i 1025-65000 -n1)
 
+    # Install packages (silently)
     if [ "$OS" = "debian" ]; then
         apt-get update >/dev/null 2>&1
         DEBIAN_FRONTEND=noninteractive apt-get install -y dante-server curl iptables iptables-persistent >/dev/null 2>&1
@@ -58,9 +74,11 @@ install_socks5() {
         systemctl start iptables >/dev/null 2>&1
     fi
 
+    # Create user (silently)
     useradd -M -N -s /usr/sbin/nologin "$USERNAME" >/dev/null 2>&1 || true
     echo "${USERNAME}:${PASSWORD}" | chpasswd >/dev/null 2>&1
 
+    # Configure Dante
     [ -f /etc/danted.conf ] && cp /etc/danted.conf /etc/danted.conf.bak.$(date +%F_%T) >/dev/null 2>&1
     cat > /etc/danted.conf <<EOF
 logoutput: syslog /var/log/danted.log
@@ -88,6 +106,7 @@ EOF
     systemctl restart danted >/dev/null 2>&1
     systemctl enable danted >/dev/null 2>&1
 
+    # Open firewall (silently)
     if command -v ufw >/dev/null 2>&1; then
         ufw allow "${PORT}/tcp" >/dev/null 2>&1
     else
@@ -95,9 +114,10 @@ EOF
         iptables-save > /etc/iptables/rules.v4 >/dev/null 2>&1 || true
     fi
 
+    # Return formatted info
     echo "socks5://${PUBLIC_IP}:${PORT}:${USERNAME}:${PASSWORD}"
 }
 
-echo "🚀 Installing SOCKS5 server with fixed configuration..."
+echo "🚀 Installing SOCKS5 server with automatic configuration..."
 socks_info=$(install_socks5)
 draw_box "🧦 SOCKS5 PROXY SERVER" "$socks_info"
