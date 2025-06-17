@@ -1,0 +1,1 @@
+Simple installer for SOCKS5 (Dante) with fixed credentials
